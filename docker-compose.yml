@@ -1,0 +1,27 @@
+services:
+  app:
+    build: .
+    container_name: europe3-transformer
+    volumes:
+      - ./src:/home/appuser/app/src
+      - ./data:/home/appuser/app/data
+      - ./.env:/home/appuser/app/.env
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["make", "prod"]
+    
+  test:
+    build: .
+    container_name: europe3-test
+    volumes:
+      - ./src:/home/appuser/app/src
+      - ./data:/home/appuser/app/data
+      - ./tests:/home/appuser/app/tests
+      - ./.env:/home/appuser/app/.env
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    profiles: ["test"]

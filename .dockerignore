@@ -1,0 +1,64 @@
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+.env.local
+.env.development
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS Files
+.DS_Store
+Thumbs.db
+.Spotlight-V100
+
+# Output directories (except sample data)
+data/output/
+
+# Logs
+*.log
+logs/
+
+# Testing
+tests/
+htmlcov/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Dependencies (will be installed in container)
+node_modules/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Large files that shouldn't be in Docker context
+*.zip
+*.tar.gz
+*.sql
+*.dump
