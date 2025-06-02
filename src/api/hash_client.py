@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 import requests
 
-from src.config import get_api_config
+from src.config import get_hash_api_config
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ def get_hash_digest(value: str, max_retries: Optional[int] = None) -> Optional[s
         return None
 
     # Get configuration
-    config = get_api_config()
+    config = get_hash_api_config()
     url = f"{config['url']}{quote(value)}"
     max_retries = max_retries or config["max_retries"]
 

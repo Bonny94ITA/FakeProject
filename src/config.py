@@ -1,90 +1,74 @@
+"""Configuration module for the data pipeline."""
+
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict
 
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
+def load_application_config() -> Dict[str, Any]:
+    """Load application configuration from JSON file."""
+    config_path = Path(__file__).parent.parent / "config" / "application.json"
 
-def get_config(key: str, default: str = "") -> str:
-    """Get configuration value from environment."""
-    return os.getenv(key, default)
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            return json.load(f)
+    else:
+        return {}
 
+# Load app config once
+APP_CONFIG = load_application_config()
 
-def get_typed_config(key: str, value_type: type, default: Any = None) -> Any:
-    """Get typed configuration value from environment."""
-    value = os.getenv(key)
-    if value is None:
-        return default
-    try:
-        if value_type is bool:
-            return value.lower() in ("true", "1", "yes", "on")
-        return value_type(value)
-    except ValueError:
-        return default
-
-
-def get_api_config() -> Dict[str, Any]:
-    """Get API configuration."""
+def get_hash_api_config() -> Dict[str, Any]:
+    """Get hash API configuration."""
     return {
-        "url": get_config("HASH_API_URL", "https://api.hashify.net/hash/md4/hex?value="),
-        "timeout": get_typed_config("HASH_API_TIMEOUT", int, 5),
-        "max_retries": get_typed_config("HASH_API_MAX_RETRIES", int, 3),
-        "backoff_factor": get_typed_config("HASH_API_BACKOFF_FACTOR", int, 2),
+        "url": os.getenv("HASH_API_URL", "https://api.hashify.net/hash/md4/hex?value="),
+        "timeout": int(os.getenv("HASH_API_TIMEOUT", "5")),
+        "max_retries": int(os.getenv("HASH_API_MAX_RETRIES", "3")),
+        "backoff_factor": float(os.getenv("HASH_API_BACKOFF_FACTOR", "2")),
     }
-
 
 def get_spark_config() -> Dict[str, Any]:
     """Get Spark configuration."""
     return {
-        "master": get_config("SPARK_MASTER", "local[*]"),
-        "app_name": get_config("SPARK_APP_NAME", "DataTransformer"),
-        "enable_caching": get_typed_config("ENABLE_CACHING", bool, True),
+        "spark.sql.adaptive.enabled": "true",
+        "spark.sql.adaptive.coalescePartitions.enabled": "true",
+        "spark.sql.shuffle.partitions": "4",
+        "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
     }
-
-
-def get_schema_config() -> Dict[str, Any]:
-    """Get schema validation configuration."""
-    return {
-        "validation_mode": get_config("SCHEMA_VALIDATION_MODE", "STRICT"),
-        "evolution_enabled": get_typed_config("SCHEMA_EVOLUTION_ENABLED", bool, False),
-    }
-
 
 def get_file_format_config() -> Dict[str, Any]:
     """Get file format configuration."""
+    formats = APP_CONFIG.get("file_formats", {})
     return {
-        "input_format": get_config("INPUT_FILE_FORMAT", "csv"),
-        "output_format": get_config("OUTPUT_FILE_FORMAT", "parquet"),
-        "csv_delimiter": get_config("CSV_DELIMITER", ","),
-        "csv_quote_char": get_config("CSV_QUOTE_CHAR", '"'),
-        "csv_escape_char": get_config("CSV_ESCAPE_CHAR", '"'),
+        "destination": formats.get("destination", os.getenv("DESTINATION", "file")),
+        "input_format": formats.get("input_format", os.getenv("INPUT_FILE_FORMAT", "csv")),
+        "output_format": formats.get("output_format", os.getenv("OUTPUT_FILE_FORMAT", "csv")),
     }
-
 
 def get_csv_options() -> Dict[str, str]:
     """Get CSV reading options for Spark."""
+    csv_opts = APP_CONFIG.get("file_formats", {}).get("csv_options", {})
     return {
-        "header": get_config("CSV_HEADER", "true"),
-        "sep": get_config("CSV_DELIMITER", ","),
-        "quote": get_config("CSV_QUOTE_CHAR", '"'),
-        "escape": get_config("CSV_ESCAPE_CHAR", '"'),
-        "mode": get_config("CSV_MODE", "PERMISSIVE"),
-        "multiLine": get_config("CSV_MULTILINE", "true"),
+        "header": csv_opts.get("header", os.getenv("CSV_HEADER", "true")),
+        "sep": csv_opts.get("delimiter", os.getenv("CSV_DELIMITER", ",")),
+        "quote": csv_opts.get("quote_char", os.getenv("CSV_QUOTE_CHAR", '"')),
+        "escape": csv_opts.get("escape_char", os.getenv("CSV_ESCAPE_CHAR", '"')),
+        "mode": csv_opts.get("mode", os.getenv("CSV_MODE", "PERMISSIVE")),
+        "multiLine": csv_opts.get("multiline", os.getenv("CSV_MULTILINE", "true")),
         "ignoreLeadingWhiteSpace": "true",
         "ignoreTrailingWhiteSpace": "true",
     }
 
-
 def get_path_config() -> Dict[str, str]:
-    """Get path configuration."""
+    """Get path configuration from environment variables."""
     return {
-        "input_path": get_config("INPUT_PATH", "./data/input"),
-        "output_path": get_config("OUTPUT_PATH", "./data/output"),
+        "input_path": os.getenv("INPUT_PATH", "data/input"),
+        "output_path": os.getenv("OUTPUT_PATH", "data/output")
     }
-
 
 def join_paths(*args) -> Path:
     """Join paths in a cross-platform way."""

@@ -37,7 +37,6 @@ data/output/
 logs/
 
 # Testing
-tests/
 htmlcov/
 
 # Docker

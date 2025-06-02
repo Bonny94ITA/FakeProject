@@ -1,1 +1,1 @@
-"""Data transformation pipeline package."""
+"""Source code package."""

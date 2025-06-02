@@ -1,0 +1,57 @@
+{
+  "SOURCE_SYSTEM": {
+    "required": true,
+    "type": "text",
+    "regex": "^Claim_SR_[A-Za-z0-9_]+$",
+    "description": "Source system must be present (PK)",
+    "role": "primary_key"
+  },
+  "CLAIM_ID": {
+    "required": true,
+    "type": "text",
+    "regex": "^[A-Z]+_[0-9]+$",
+    "description": "Claim ID is required (PK) - format: PREFIX_NUMBER",
+    "role": "primary_key"
+  },
+  "CONTRACT_SOURCE_SYSTEM": {
+    "required": true,
+    "type": "text",
+    "description": "Contract source system required (FK)",
+    "role": "foreign_key"
+  },
+  "CONTRACT_ID": {
+    "required": true,
+    "type": "number",
+    "regex": "^[0-9]+$",
+    "cast_to": "long",
+    "description": "Contract ID is required (FK)",
+    "role": "foreign_key"
+  },
+  "CLAIM_TYPE": {
+    "required": false,
+    "type": "text",
+    "allowed_values": ["1", "2", null, ""],
+    "cast_to": "int",
+    "nullable": true,
+    "description": "Claim type is optional"
+  },
+  "DATE_OF_LOSS": {
+    "required": true,
+    "type": "date",
+    "date_format": "dd.MM.yyyy",
+    "description": "Date of loss required"
+  },
+  "AMOUNT": {
+    "required": true,
+    "type": "decimal",
+    "regex": "^[0-9]+\\.?[0-9]*$",
+    "cast_to": "decimal(16,5)",
+    "description": "Amount is required"
+  },
+  "CREATION_DATE": {
+    "required": true,
+    "type": "timestamp",
+    "timestamp_format": "dd.MM.yyyy HH:mm",
+    "description": "Creation date required"
+  }
+}

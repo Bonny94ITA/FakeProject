@@ -3,7 +3,7 @@ from typing import Dict, Tuple
 
 from pyspark.sql import DataFrame, SparkSession
 
-from src.config import get_file_format_config, join_paths
+from src.config import join_paths
 from src.pipeline.data_pipeline import DataPipeline
 from src.pipeline.extraction.extractor_factory import DataExtractorFactory
 from src.pipeline.loading.loader_factory import LoaderFactory
@@ -18,15 +18,12 @@ class ContractClaimPipeline(DataPipeline):
         super().__init__(spark, input_dir, output_dir)
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        # Get file format configuration
-        self.file_format_config = get_file_format_config()
-
         # Create components using factory pattern - metodi unificati
-        self.contract_extractor = DataExtractorFactory.create_extractor(spark, "contract")
-        self.claim_extractor = DataExtractorFactory.create_extractor(spark, "claim")
+        self.contract_extractor = DataExtractorFactory.create_extractor(spark)
+        self.claim_extractor = DataExtractorFactory.create_extractor(spark)
         self.schema_validator = SchemaValidator()
         self.transformer = TransformerFactory.get_contract_claim_transformer(spark)
-        self.loader = LoaderFactory.create_loader(output_dir, config=self.file_format_config)
+        self.loader = LoaderFactory.create_loader(output_dir)
 
     def extract(self) -> Dict[str, DataFrame]:
         """

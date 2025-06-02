@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Dict
 
 from pyspark.sql import DataFrame
 
@@ -8,9 +8,8 @@ from pyspark.sql import DataFrame
 class BaseLoader(ABC):
     """Base abstract class for all data loaders."""
 
-    def __init__(self, output_dir: str, config: Dict[str, Any]):
+    def __init__(self, output_dir: str):
         self.output_dir = output_dir
-        self.config = config
         self.logger = logging.getLogger(self.__class__.__name__)
 
     @abstractmethod

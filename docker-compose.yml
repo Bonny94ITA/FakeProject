@@ -5,6 +5,7 @@ services:
     volumes:
       - ./src:/home/appuser/app/src
       - ./data:/home/appuser/app/data
+      - ./config:/home/appuser/app/config
       - ./.env:/home/appuser/app/.env
     env_file:
       - .env
@@ -18,6 +19,7 @@ services:
     volumes:
       - ./src:/home/appuser/app/src
       - ./data:/home/appuser/app/data
+      - ./config:/home/appuser/app/config
       - ./tests:/home/appuser/app/tests
       - ./.env:/home/appuser/app/.env
     env_file:

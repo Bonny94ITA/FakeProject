@@ -1,0 +1,42 @@
+{
+  "SOURCE_SYSTEM": {
+    "required": true,
+    "type": "text",
+    "regex": "^Contract_SR_[A-Za-z0-9_]+$",
+    "description": "Source system must be present (PK)",
+    "role": "primary_key"
+  },
+  "CONTRACT_ID": {
+    "required": true,
+    "type": "number",
+    "regex": "^[0-9]+$",
+    "cast_to": "long",
+    "description": "Contract ID is required (PK)",
+    "role": "primary_key"
+  },
+  "CONTRACT_TYPE": {
+    "required": false,
+    "type": "text",
+    "allowed_values": ["Direct", "Reinsurance", null, ""],
+    "nullable": true,
+    "description": "Contract type is optional - can be empty"
+  },
+  "INSURED_PERIOD_FROM": {
+    "required": true,
+    "type": "date",
+    "date_format": "dd.MM.yyyy",
+    "description": "Insurance start date required"
+  },
+  "INSURED_PERIOD_TO": {
+    "required": true,
+    "type": "date", 
+    "date_format": "dd.MM.yyyy",
+    "description": "Insurance end date required"
+  },
+  "CREATION_DATE": {
+    "required": true,
+    "type": "timestamp",
+    "timestamp_format": "dd.MM.yyyy HH:mm",
+    "description": "Creation date required"
+  }
+}
