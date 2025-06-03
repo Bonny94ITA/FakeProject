@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 from pyspark.sql import DataFrame
 
-from src.config import get_file_format_config, join_paths
+from src.config import get_file_format_config, get_format_write_options, join_paths
 from src.pipeline.loading.base_loader import BaseLoader
 
 
@@ -63,18 +63,24 @@ class FileLoader(BaseLoader):
     def _write_data(self, data: DataFrame, path: str, mode: str = "overwrite") -> None:
         """Internal method to write data in the specified format."""
         writer = data.write.mode(mode)
+        format_name = self.config["output_format"].lower()
 
-        if self.config["output_format"].lower() == "parquet":
+        # Apply common options for the format
+        format_options = get_format_write_options().get(format_name, {})
+        for key, value in format_options.items():
+            writer = writer.option(key, value)
+
+        # Write in the appropriate format
+        if format_name == "parquet":
             writer.parquet(path)
-        elif self.config["output_format"].lower() == "json":
-            writer.option("header", True).json(path)
-        elif self.config["output_format"].lower() == "csv":
-            writer.option("header", True).csv(path)
-        elif self.config["output_format"].lower() == "delta":
+        elif format_name == "json":
+            writer.json(path)
+        elif format_name == "csv":
+            writer.csv(path)
+        elif format_name == "delta":
             writer.format("delta").save(path)
-        elif self.config["output_format"].lower() == "orc":
+        elif format_name == "orc":
             writer.orc(path)
         else:
-            output = self.config["output_format"].lower()
-            self.logger.warning(f"Unsupported output format '{output}'. Falling back to Parquet.")
+            self.logger.warning(f"Unsupported output format '{format_name}'. Falling back to Parquet.")
             writer.parquet(path)

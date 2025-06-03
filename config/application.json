@@ -2,14 +2,14 @@
   "file_formats": {
     "destination": "file",
     "input_format": "csv",
-    "output_format": "json",
-    "csv_options": {
-      "delimiter": ",",
-      "quote_char": "\"",
-      "escape_char": "\"",
-      "header": "true",
-      "mode": "PERMISSIVE",
-      "multiline": "true"
-    }
+    "output_format": "csv"
+  },
+  "csv_options": {
+    "delimiter": ",",
+    "quote_char": "\"",
+    "escape_char": "\"",
+    "header": "true",
+    "mode": "PERMISSIVE",
+    "multiline": "true"
   }
 }

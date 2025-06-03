@@ -36,7 +36,6 @@ def main():
         logger.info("Transformation completed successfully")
     except Exception as e:
         logger.error(f"Error in execution: {str(e)}")
-        logger.error("Local Spark execution failed. Please use Docker: 'make docker-run'")
         sys.exit(1)
     finally:
         if spark is not None:  # Only stop if spark was successfully created

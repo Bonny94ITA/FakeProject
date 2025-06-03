@@ -2,7 +2,6 @@
   "SOURCE_SYSTEM": {
     "required": true,
     "type": "text",
-    "regex": "^Claim_SR_[A-Za-z0-9_]+$",
     "description": "Source system must be present (PK)",
     "role": "primary_key"
   },
@@ -32,7 +31,6 @@
     "type": "text",
     "allowed_values": ["1", "2", null, ""],
     "cast_to": "int",
-    "nullable": true,
     "description": "Claim type is optional"
   },
   "DATE_OF_LOSS": {

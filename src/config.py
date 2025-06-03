@@ -51,7 +51,7 @@ def get_file_format_config() -> Dict[str, Any]:
 
 def get_csv_options() -> Dict[str, str]:
     """Get CSV reading options for Spark."""
-    csv_opts = APP_CONFIG.get("file_formats", {}).get("csv_options", {})
+    csv_opts = APP_CONFIG.get("csv_options", {})
     return {
         "header": csv_opts.get("header", os.getenv("CSV_HEADER", "true")),
         "sep": csv_opts.get("delimiter", os.getenv("CSV_DELIMITER", ",")),
@@ -73,3 +73,31 @@ def get_path_config() -> Dict[str, str]:
 def join_paths(*args) -> Path:
     """Join paths in a cross-platform way."""
     return Path(*args)
+
+def get_format_write_options() -> Dict[str, Dict[str, str]]:
+    """Get write options for all supported formats."""
+    return {
+        "csv": {
+            "header": "true",
+            "nullValue": "",
+            "timestampFormat": "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "dateFormat": "yyyy-MM-dd",
+        },
+        "json": {
+            "ignoreNullFields": "false",
+            "timestampFormat": "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "dateFormat": "yyyy-MM-dd",
+        },
+        "parquet": {
+            "timestampFormat": "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "dateFormat": "yyyy-MM-dd",
+        },
+        "delta": {
+            "timestampFormat": "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "dateFormat": "yyyy-MM-dd",
+        },
+        "orc": {
+            "timestampFormat": "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "dateFormat": "yyyy-MM-dd",
+        }
+    }

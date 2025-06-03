@@ -2,7 +2,6 @@
   "SOURCE_SYSTEM": {
     "required": true,
     "type": "text",
-    "regex": "^Contract_SR_[A-Za-z0-9_]+$",
     "description": "Source system must be present (PK)",
     "role": "primary_key"
   },
@@ -18,7 +17,6 @@
     "required": false,
     "type": "text",
     "allowed_values": ["Direct", "Reinsurance", null, ""],
-    "nullable": true,
     "description": "Contract type is optional - can be empty"
   },
   "INSURED_PERIOD_FROM": {

@@ -1,10 +1,11 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 from pyspark.sql import DataFrame
-from pyspark.sql.functions import col, lit, to_date, to_timestamp, when
+from pyspark.sql.functions import array, col, concat_ws, lit, to_date, to_timestamp, when
+from pyspark.sql.functions import col as spark_col
 from pyspark.sql.types import IntegerType, LongType
 
 
@@ -14,19 +15,6 @@ class GenericValidator:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.validation_schemas_dir = Path(__file__).parent.parent.parent / "validation_schemas"
-
-    def load_validation_schema(self, schema_name: str) -> Dict[str, Any]:
-        """Load validation schema from JSON file."""
-        schema_path = self.validation_schemas_dir / f"{schema_name}_validation.json"
-
-        if not schema_path.exists():
-            raise FileNotFoundError(f"Validation schema not found: {schema_path}")
-
-        with open(schema_path, 'r') as f:
-            schema = json.load(f)
-
-        self.logger.info(f"Loaded validation schema: {schema_name}")
-        return schema
 
     def validate_dataframe(self, df: DataFrame, schema_name: str) -> Tuple[DataFrame, DataFrame]:
         """
@@ -40,7 +28,7 @@ class GenericValidator:
             Tuple of (valid_df, invalid_df)
         """
         try:
-            validation_rules = self.load_validation_schema(schema_name)
+            validation_rules = self._load_validation_schema(schema_name, df)
 
             # Handle column name fixes first
             df = self._fix_column_names(df, schema_name)
@@ -64,6 +52,61 @@ class GenericValidator:
         except Exception as e:
             self.logger.error(f"Error in {schema_name} validation: {e}")
             raise
+
+    def _load_validation_schema(self, schema_name: str, df: DataFrame) -> Dict[str, Any]:
+        """Load validation schema from JSON file and validate CSV structure."""
+
+        # Basic validation
+        if not schema_name or schema_name not in ["contract", "claim"]:
+            raise ValueError(f"Invalid schema name: '{schema_name}'. Use 'contract' or 'claim'")
+
+        schema_path = self.validation_schemas_dir / f"{schema_name}_validation.json"
+
+        if not schema_path.exists():
+            raise FileNotFoundError(f"Validation schema not found: {schema_path}")
+
+        try:
+            with open(schema_path, 'r') as f:
+                schema = json.load(f)
+
+            if not schema:
+                raise ValueError(f"Empty schema file: {schema_path}")
+
+            # Validate CSV columns against schema
+            csv_columns = set(df.columns)
+            schema_columns = set(schema.keys())
+
+            # Check for malformed headers
+            header_str = ','.join(df.columns)
+            if '""' in header_str or any('"' in col for col in df.columns):
+                raise ValueError(f"INVALID CSV FORMAT: Malformed headers detected in {schema_name} file")
+
+            # Check each schema column exists in CSV (with typo variants)
+            missing_cols = []
+            for schema_col in schema_columns:
+                # Define typo variants for known cases
+                variants = [schema_col]
+                if schema_col == "CONTRACT_ID":
+                    variants.append("CONTRAT_ID")
+                elif schema_col == "INSURED_PERIOD_TO":
+                    variants.append("INSUDRED_PERIOD_TO")
+
+                # Check if any variant exists
+                if not any(variant in csv_columns for variant in variants):
+                    missing_cols.append(schema_col)
+
+            if missing_cols:
+                raise ValueError(f"INVALID CSV FORMAT: Missing required columns in {schema_name} file: {missing_cols}")
+
+            self.logger.info(f"Loaded validation schema: {schema_name}")
+            return schema
+
+        except json.JSONDecodeError:
+            raise ValueError("INVALID CSV FORMAT: Malformed JSON in schema file")
+        except Exception as e:
+            if "INVALID CSV FORMAT" in str(e):
+                raise  # Re-raise our custom errors
+            raise IOError(f"Cannot read schema file: {e}")
 
     def _fix_column_names(self, df: DataFrame, schema_name: str) -> DataFrame:
         """Fix known column name issues."""
@@ -98,179 +141,132 @@ class GenericValidator:
         return validated_df
 
     def _apply_column_validation(self, df: DataFrame, column: str, config: Dict[str, Any]) -> DataFrame:
-        """Apply all validations for a single column based on its attributes."""
+        """Apply validation for a single column with simplified logic."""
+
+        validation_conditions = []
 
         # 1. Required validation
         if config.get("required", False):
-            df = df.withColumn(
-                f"{column}_REQUIRED_VALID",
-                when((col(column).isNotNull()) & (col(column) != ""), col(column)).otherwise(None)
+            validation_conditions.append(
+                (col(column).isNotNull()) & (col(column) != "")
             )
-        else:
-            # Optional fields always pass required check
-            df = df.withColumn(f"{column}_REQUIRED_VALID", col(column))
 
         # 2. Regex validation
         if "regex" in config:
-            df = df.withColumn(
-                f"{column}_FORMAT_VALID",
-                when(col(column).rlike(config["regex"]), col(column))
-                .when(col(column).isNull() | (col(column) == ""), col(column))  # Allow nulls for optional fields
-                .otherwise(None)
-            )
+            regex_condition = col(column).rlike(config["regex"])
+            # Optional fields
+            if not config.get("required", False):
+                regex_condition = regex_condition | col(column).isNull() | (col(column) == "")
+            validation_conditions.append(regex_condition)
 
         # 3. Allowed values validation
         if "allowed_values" in config:
             allowed_vals = config["allowed_values"]
-            nullable = config.get("nullable", False)
+            value_condition = col(column).isin(allowed_vals)
+            # Optional fields
+            if not config.get("required", False):
+                value_condition = value_condition | col(column).isNull() | (col(column) == "")
+            validation_conditions.append(value_condition)
 
-            if nullable or None in allowed_vals or "" in allowed_vals:
-                df = df.withColumn(
-                    f"{column}_VALUES_VALID",
-                    when(col(column).isin(allowed_vals), col(column))
-                    .when(col(column).isNull() | (col(column) == ""), col(column))
-                    .otherwise(None)
-                )
-            else:
-                df = df.withColumn(
-                    f"{column}_VALUES_VALID",
-                    when(col(column).isin(allowed_vals), col(column)).otherwise(None)
-                )
-
-        # 4. Date format validation
+        # 4. Date validation
         if config.get("type") == "date" and "date_format" in config:
-            df = df.withColumn(
-                f"{column}_DATE_VALID",
-                to_date(col(column), config["date_format"])
-            )
+            date_condition = to_date(col(column), config["date_format"]).isNotNull()
+            # Optional fields
+            if not config.get("required", False):
+                date_condition = date_condition | col(column).isNull() | (col(column) == "")
+            validation_conditions.append(date_condition)
 
-        # 5. Timestamp format validation
+        # 5. Timestamp validation
         if config.get("type") == "timestamp" and "timestamp_format" in config:
-            df = df.withColumn(
-                f"{column}_TIMESTAMP_VALID",
-                to_timestamp(col(column), config["timestamp_format"])
-            )
+            ts_condition = to_timestamp(col(column), config["timestamp_format"]).isNotNull()
+            # Optional fields
+            if not config.get("required", False):
+                ts_condition = ts_condition | col(column).isNull() | (col(column) == "")
+            validation_conditions.append(ts_condition)
 
-        # 6. Type casting (optional for validation phase)
+        if validation_conditions:
+            final_condition = validation_conditions[0]
+            for condition in validation_conditions[1:]:
+                final_condition = final_condition & condition
+            df = df.withColumn(f"{column}_IS_VALID", final_condition)
+        else:
+            df = df.withColumn(f"{column}_IS_VALID", lit(True))
+
+        # Type casting if necessary
         if "cast_to" in config:
-            df = self._apply_type_casting(df, column, config["cast_to"], config.get("nullable", False))
+            df = self._apply_type_casting(df, column, config["cast_to"])
 
         return df
 
-    def _apply_type_casting(self, df: DataFrame, column: str, cast_type: str, nullable: bool) -> DataFrame:
+    def _apply_type_casting(self, df: DataFrame, column: str, cast_type: str) -> DataFrame:
         """Apply type casting for a column."""
-        validation_col = f"{column}_CAST_VALID"
-
         if cast_type == "long":
-            df = df.withColumn(validation_col, col(column).cast(LongType()))
+            df = df.withColumn(column, col(column).cast(LongType()))
         elif cast_type == "int":
-            if nullable:
-                df = df.withColumn(
-                    validation_col,
-                    when(col(column).isin("1", "2"), col(column).cast(IntegerType()))
-                    .when(col(column).isNull() | (col(column) == ""), None)
-                    .otherwise(None)
-                )
-            else:
-                df = df.withColumn(validation_col, col(column).cast(IntegerType()))
+            df = df.withColumn(column, col(column).cast(IntegerType()))
         elif cast_type.startswith("decimal"):
-            df = df.withColumn(validation_col, col(column).cast(cast_type))
+            df = df.withColumn(column, col(column).cast(cast_type))
         else:
             self.logger.warning(f"Unknown cast type: {cast_type}")
 
         return df
 
     def _split_valid_invalid(self, df: DataFrame, rules: Dict[str, Any]) -> Tuple[DataFrame, DataFrame]:
-        """Split DataFrame into valid and invalid records based on column attributes."""
+        """Split DataFrame into valid and invalid records based on validation columns."""
 
-        # Build validation condition ONLY for required fields
-        required_conditions = []
+        validation_cols = [f"{col}_IS_VALID" for col in rules.keys() if f"{col}_IS_VALID" in df.columns]
         base_columns = list(rules.keys())
 
-        for column_name, column_config in rules.items():
-            # Only check required fields
-            if column_config.get("required", False):
-                required_conditions.append(col(f"{column_name}_REQUIRED_VALID").isNotNull())
-
-            # Add format validations if they exist AND field is required
-            if "regex" in column_config and column_config.get("required", False):
-                required_conditions.append(col(f"{column_name}_FORMAT_VALID").isNotNull())
-
-            # Add value validations if they exist AND field is required AND not nullable
-            if ("allowed_values" in column_config and
-                column_config.get("required", False) and
-                not column_config.get("nullable", False)):
-                required_conditions.append(col(f"{column_name}_VALUES_VALID").isNotNull())
-
-            # Add date validations if field is required
-            if column_config.get("type") == "date" and column_config.get("required", False):
-                required_conditions.append(col(f"{column_name}_DATE_VALID").isNotNull())
-
-            # Add timestamp validations if field is required
-            if column_config.get("type") == "timestamp" and column_config.get("required", False):
-                required_conditions.append(col(f"{column_name}_TIMESTAMP_VALID").isNotNull())
-
-        # Build overall validation condition
-        if required_conditions:
-            valid_condition = required_conditions[0]
-            for condition in required_conditions[1:]:
-                valid_condition = valid_condition & condition
-        else:
-            # If no required validations, all records are valid
-            self.logger.info("No required validations found - all records considered valid")
+        if not validation_cols:
+            # No validation columns found — treat all rows as valid
             return df.select(*base_columns), df.limit(0).select(*base_columns)
 
-        # Create clean DataFrames
-        valid_df = self._create_clean_dataframe(df, base_columns, valid_condition, True)
-        invalid_df = self._create_clean_dataframe(df, base_columns, valid_condition, False)
-        invalid_df = self._add_error_messages(invalid_df, rules)
+        # A record is valid only if all validations pass
+        all_valid_condition = col(validation_cols[0])
+        for val_col in validation_cols[1:]:
+            all_valid_condition = all_valid_condition & col(val_col)
 
-        return valid_df, invalid_df
+        # Filter valid records (only select base columns)
+        valid_df = df.filter(all_valid_condition).select(*base_columns)
 
-    def _create_clean_dataframe(self, df: DataFrame, base_columns: List[str], valid_condition, is_valid: bool) -> DataFrame:
-        """Create clean DataFrame with proper column selection."""
-        if is_valid:
-            clean_df = df.filter(valid_condition)
+        # Keep all columns for invalid_df for error processing
+        invalid_df = df.filter(~all_valid_condition)
+
+        # Add error messages based on validation columns
+        if invalid_df.count() > 0:
+            invalid_df = self._add_error_messages(invalid_df, rules)
+            # Now select base columns + validation_error (which now exists)
+            final_invalid_df = invalid_df.select(*base_columns, "validation_error")
         else:
-            clean_df = df.filter(~valid_condition)
+            # If there are no invalid records, create an empty DataFrame with validation_error
+            final_invalid_df = invalid_df.select(*base_columns).withColumn("validation_error", lit(""))
 
-        # Select only original columns
-        select_columns = [col for col in df.columns if col in base_columns]
-        return clean_df.select(*select_columns)
+        return valid_df, final_invalid_df
+
 
     def _add_error_messages(self, invalid_df: DataFrame, rules: Dict[str, Any]) -> DataFrame:
-        """Add descriptive error messages based on column attributes."""
-        error_condition = None
+        """Add error messages showing which columns failed validation."""
 
-        for column_name, column_config in rules.items():
-            # Skip optional fields for error messages
-            if not column_config.get("required", False):
-                continue
+        # Find all available validation columns
+        validation_cols = [f"{col}_IS_VALID" for col in rules.keys() if f"{col}_IS_VALID" in invalid_df.columns]
 
-            description = column_config.get("description", f"Invalid {column_name}")
-            role = column_config.get("role", "")
+        if not validation_cols:
+            return invalid_df.withColumn("validation_error", lit("Validation failed"))
 
-            if role == "primary_key":
-                description = f"{description} (PK)"
-            elif role == "foreign_key":
-                description = f"{description} (FK)"
+        failed_columns = []
+        for val_col in validation_cols:
+            column_name = val_col.replace("_IS_VALID", "")
+            failed_columns.append(
+                when(~spark_col(val_col), column_name).otherwise(None)
+            )
 
-            if error_condition is None:
-                error_condition = when(
-                    col(column_name).isNull() | (col(column_name) == ""),
-                    description
-                )
-            else:
-                error_condition = error_condition.when(
-                    col(column_name).isNull() | (col(column_name) == ""),
-                    description
-                )
+        # Create an array of failed columns to generate a validation error message
+        failed_array = array(*failed_columns)
 
-        # Handle case where no required fields are invalid
-        if error_condition is None:
-            return invalid_df.withColumn("validation_error", lit("Unknown validation error"))
+        validation_error = concat_ws(", ", failed_array)
 
         return invalid_df.withColumn(
             "validation_error",
-            error_condition.otherwise("Unknown validation error")
+            when(validation_error != "", concat_ws("", lit("Failed columns: "), validation_error))
+            .otherwise("Validation failed")
         )

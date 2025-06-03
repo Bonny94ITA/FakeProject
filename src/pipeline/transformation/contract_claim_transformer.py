@@ -28,9 +28,6 @@ class ContractClaimTransformer(BaseTransformer):
         # Generate NSE_ID using hash API
         df = self._generate_nse_id(df)
 
-        # Validate data architect schema compliance
-        df = self._validate_schema_compliance(df)
-
         # Select only required columns
         result_df = self._select_output_columns(df)
 
@@ -42,13 +39,6 @@ class ContractClaimTransformer(BaseTransformer):
         # Rename ambiguous columns to avoid conflicts
         contract_df = contract_df.withColumnRenamed("CREATION_DATE", "CONTRACT_CREATION_DATE")
         claim_df = claim_df.withColumnRenamed("CREATION_DATE", "CLAIM_CREATION_DATE")
-
-        # Handle the typo in the CSV: CONTRAT_ID -> CONTRACT_ID
-        if "CONTRAT_ID" in claim_df.columns:
-            self.logger.warning("Found 'CONTRAT_ID' column in claim data - renaming to 'CONTRACT_ID'")
-            claim_df = claim_df.withColumnRenamed("CONTRAT_ID", "CONTRACT_ID")
-        elif "CONTRACT_ID" not in claim_df.columns:
-            raise ValueError("Neither 'CONTRACT_ID' nor 'CONTRAT_ID' found in claim data")
 
         # Rename CONTRACT_ID to distinguish the two sources
         contract_df = contract_df.withColumnRenamed("CONTRACT_ID", "CONTRACT_ID_FROM_CONTRACT")
@@ -74,7 +64,7 @@ class ContractClaimTransformer(BaseTransformer):
         df = df.withColumn("CONTRACT_SOURCE_SYSTEM_ID",
                       col("CONTRACT_ID_FROM_CONTRACT").cast("long"))
 
-        # Extract SOURCE_SYSTEM_ID (remove prefix and convert to integer)
+        # Extract SOURCE_SYSTEM_ID - remove prefix and convert to integer
         df = df.withColumn(
             "SOURCE_SYSTEM_ID",
             regexp_replace(col("CLAIM_ID"), "^[A-Za-z_]+", "").cast("int")
@@ -83,8 +73,8 @@ class ContractClaimTransformer(BaseTransformer):
         # Map TRANSACTION_TYPE - ensure NOT NULL per data architect spec
         df = df.withColumn(
             "TRANSACTION_TYPE",
-            when(col("CLAIM_TYPE") == "2", "Corporate")
-            .when(col("CLAIM_TYPE") == "1", "Private")
+            when(col("CLAIM_TYPE") == "1", "Private")
+            .when(col("CLAIM_TYPE") == "2", "Corporate")
             .otherwise("Unknown")
         )
 
@@ -132,8 +122,8 @@ class ContractClaimTransformer(BaseTransformer):
         def get_hash_from_map(claim_id):
             if claim_id is None:
                 return "UNKNOWN_HASH"  # Default to ensure NOT NULL per spec
-            hash_value = hash_map_broadcast.value.get(claim_id, "")
-            return hash_value if hash_value else "UNKNOWN_HASH"  # Ensure NOT NULL
+            hash_value = hash_map_broadcast.value.get(claim_id, "") # Lookup in the broadcasted map
+            return hash_value if hash_value else "UNKNOWN_HASH"  # Ensure NOT NULL values
 
         hash_udf = udf(get_hash_from_map, StringType())
         return df.withColumn("NSE_ID", hash_udf(col("CLAIM_ID")))
@@ -150,38 +140,18 @@ class ContractClaimTransformer(BaseTransformer):
                 hash_map[claim_id] = "UNKNOWN_HASH"
         return hash_map
 
-    def _validate_schema_compliance(self, df: DataFrame) -> DataFrame:
-        """Validate compliance with data architect schema."""
-        # Ensure TRANSACTION_TYPE is never NULL (data architect requirement)
-        null_transaction_types = df.filter(col("TRANSACTION_TYPE").isNull()).count()
-        if null_transaction_types > 0:
-            self.logger.warning(f"Found {null_transaction_types} records with NULL TRANSACTION_TYPE - setting to 'Unknown'")
-            df = df.withColumn("TRANSACTION_TYPE",
-                             when(col("TRANSACTION_TYPE").isNull(), "Unknown")
-                             .otherwise(col("TRANSACTION_TYPE")))
-
-        # Ensure NSE_ID is never NULL (data architect requirement)
-        null_nse_ids = df.filter(col("NSE_ID").isNull()).count()
-        if null_nse_ids > 0:
-            self.logger.warning(f"Found {null_nse_ids} records with NULL NSE_ID - setting to 'UNKNOWN_HASH'")
-            df = df.withColumn("NSE_ID",
-                             when(col("NSE_ID").isNull(), "UNKNOWN_HASH")
-                             .otherwise(col("NSE_ID")))
-
-        return df
-
     def _select_output_columns(self, df: DataFrame) -> DataFrame:
         """Select only required columns for the output in the exact order specified by data architect."""
         columns = [
-            "CONTRACT_SOURCE_SYSTEM",      # PK1
-            "CONTRACT_SOURCE_SYSTEM_ID",   # PK2
-            "SOURCE_SYSTEM_ID",
-            "TRANSACTION_TYPE",            # NOT NULL
-            "TRANSACTION_DIRECTION",
-            "CONFORMED_VALUE",
-            "BUSINESS_DATE",
-            "CREATION_DATE",
-            "SYSTEM_TIMESTAMP",
-            "NSE_ID"                       # PK3, NOT NULL
+            "CONTRACT_SOURCE_SYSTEM",      # PK1 - string, nullable: true
+            "CONTRACT_SOURCE_SYSTEM_ID",   # PK2 - long, nullable: true
+            "SOURCE_SYSTEM_ID",            # integer, nullable: true
+            "TRANSACTION_TYPE",            # string, nullable: false (NOT NULL)
+            "TRANSACTION_DIRECTION",       # string, nullable: true
+            "CONFORMED_VALUE",             # decimal(16,5), nullable: true
+            "BUSINESS_DATE",               # date, nullable: true
+            "CREATION_DATE",               # timestamp, nullable: true
+            "SYSTEM_TIMESTAMP",            # timestamp, nullable: true
+            "NSE_ID"                       # PK3 - string, nullable: false (NOT NULL)
         ]
         return df.select(*columns)
