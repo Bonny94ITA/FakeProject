@@ -19,8 +19,6 @@ class FileLoader(BaseLoader):
         if "output_format" not in self.config:
             raise ValueError("output_format is required in config")
 
-        self.output_format = self.config["output_format"].lower()
-
     def load(self, data: DataFrame, output_name: str = "TRANSACTIONS") -> None:
         """Load data in the configured output format with timestamp partitioning."""
         # Generate a timestamp for the partition
