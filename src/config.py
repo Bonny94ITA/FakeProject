@@ -67,7 +67,8 @@ def get_path_config() -> Dict[str, str]:
     """Get path configuration from environment variables."""
     return {
         "input_path": os.getenv("INPUT_PATH", "data/input"),
-        "output_path": os.getenv("OUTPUT_PATH", "data/output")
+        "output_path": os.getenv("OUTPUT_PATH", "data/output"),
+        "validation_schemas_path": os.getenv("VALIDATION_SCHEMAS_PATH", "src/validation_schemas")
     }
 
 def join_paths(*args) -> Path:

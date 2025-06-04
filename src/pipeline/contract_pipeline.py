@@ -31,50 +31,79 @@ class ContractClaimPipeline(DataPipeline):
         Returns a dictionary containing both types of data frames.
         """
         try:
-            # Use robust path joining for both files to ensure cross-platform compatibility
             contract_file = join_paths(self.input_dir, "Contract.csv")
             claim_file = join_paths(self.input_dir, "Claim.csv")
 
-            # Extract data using the appropriate extractors
-            contract_df = self.contract_extractor.extract(str(contract_file))
-            claim_df = self.claim_extractor.extract(str(claim_file))
+            if not contract_file.exists():
+                self.logger.error(f"Contract file not found: {contract_file}")
+                raise FileNotFoundError(f"Contract file not found: {contract_file}")
+            if not claim_file.exists():
+                self.logger.error(f"Claim file not found: {claim_file}")
+                raise FileNotFoundError(f"Claim file not found: {claim_file}")
 
-            # Cache the DataFrames for better performance
-            contract_df = contract_df.cache()
-            claim_df = claim_df.cache()
+            try:
+                contract_df = self.contract_extractor.extract(str(contract_file))
+            except Exception as e:
+                self.logger.error(f"Error extracting contract data: {e}")
+                raise ValueError(f"Failed to extract contract data: {e}")
+
+            try:
+                claim_df = self.claim_extractor.extract(str(claim_file))
+            except Exception as e:
+                self.logger.error(f"Error extracting claim data: {e}")
+                raise ValueError(f"Failed to extract claim data: {e}")
+
+            if contract_df.count() > 0:
+                contract_df = contract_df.cache()
+            if claim_df.count() > 0:
+                claim_df = claim_df.cache()
 
             self.logger.info(f"Extracted {contract_df.count()} contracts and {claim_df.count()} claims")
             return {"contract": contract_df, "claim": claim_df}
 
+        except FileNotFoundError as e:
+            self.logger.error(f"File not found during extraction: {e}")
+            raise
+        except ValueError as e:
+            self.logger.error(f"Value error during extraction: {e}")
+            raise
         except Exception as e:
-            self.logger.error(f"Error during data extraction: {str(e)}")
+            self.logger.error(f"Unexpected error during data extraction: {e}")
             raise
 
     def validate(self, data: Dict[str, DataFrame]) -> Tuple[Dict[str, DataFrame], Dict[str, DataFrame]]:
         """Enhanced validation with schema validation and type conversion."""
-        # Get raw input data
-        contract_df = data["contract"]
-        claim_df = data["claim"]
+        try:
+            contract_df = data["contract"]
+            claim_df = data["claim"]
 
-        # Validate data using the schema validator
-        valid_contracts, invalid_contracts = self.schema_validator.validate_and_cast_contract(contract_df)
-        valid_claims, invalid_claims = self.schema_validator.validate_and_cast_claim(claim_df)
+            valid_contracts, invalid_contracts = self.schema_validator.validate_dataframe(contract_df, "contract")
+            valid_claims, invalid_claims = self.schema_validator.validate_dataframe(claim_df, "claim")
 
-        total_invalid = invalid_contracts.count() + invalid_claims.count()
-        if total_invalid > 0:
-            self.logger.warning(f"Found {total_invalid} invalid rows (schema validation)")
+            total_invalid = invalid_contracts.count() + invalid_claims.count()
+            if total_invalid > 0:
+                self.logger.warning(f"Found {total_invalid} invalid rows (schema validation)")
 
-        return (
-            {"contract": valid_contracts, "claim": valid_claims},
-            {"invalid_contracts": invalid_contracts, "invalid_claims": invalid_claims}
-        )
+            return (
+                {"contract": valid_contracts, "claim": valid_claims},
+                {"invalid_contracts": invalid_contracts, "invalid_claims": invalid_claims}
+            )
+        except Exception as e:
+            self.logger.error(f"Error during validation: {e}")
+            raise
 
     def transform(self, data: Dict[str, DataFrame]) -> DataFrame:
         """Transform data according to business rules using the transformer."""
-        # Delegate transformation to the specialized transformer
-        return self.transformer.transform(data)
+        try:
+            return self.transformer.transform(data)
+        except Exception as e:
+            self.logger.error(f"Error during transformation: {e}")
+            raise
 
     def load(self, data: DataFrame) -> None:
         """Load data using the configured loader."""
-        # Delegate loading to the specialized loader
-        self.loader.load(data, "TRANSACTIONS")
+        try:
+            self.loader.load(data, "TRANSACTIONS")
+        except Exception as e:
+            self.logger.error(f"Error during loading: {e}")
+            raise

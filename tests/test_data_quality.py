@@ -31,7 +31,7 @@ def test_handles_typo_in_column_name(spark):
     test_data = [("Claim_SR_Europa_3", "CL_12345", "Contract_SR_Europa_3", "12345", "2", "01.01.2022", "1000.00", "02.01.2022 10:15")]
     claim_df = spark.createDataFrame(test_data, schema=claim_schema)
     
-    valid_df, invalid_df = validator.validate_and_cast_claim(claim_df)
+    valid_df, invalid_df = validator.validate_dataframe(claim_df, "claim")
     
     # Should handle typo gracefully
     assert valid_df.count() == 1
@@ -60,7 +60,7 @@ def test_primary_key_validation(spark):
     ]
     
     df = spark.createDataFrame(test_data, schema=contract_schema)
-    valid_df, invalid_df = validator.validate_and_cast_contract(df)
+    valid_df, invalid_df = validator.validate_dataframe(df, "contract")
     
     assert valid_df.count() == 1  # Only first record is valid
     assert invalid_df.count() == 2  # Two invalid records
@@ -85,7 +85,7 @@ def test_empty_dataframe_handling(spark):
     
     # Empty dataframe with correct schema
     empty_df = spark.createDataFrame([], schema=contract_schema)
-    valid_df, invalid_df = validator.validate_and_cast_contract(empty_df)
+    valid_df, invalid_df = validator.validate_dataframe(empty_df, "contract")
     
     # Should handle empty dataframes gracefully
     assert valid_df.count() == 0
@@ -112,7 +112,7 @@ def test_handles_completely_invalid_data(spark):
     ]
     
     df = spark.createDataFrame(all_invalid_data, schema=contract_schema)
-    valid_df, invalid_df = validator.validate_and_cast_contract(df)
+    valid_df, invalid_df = validator.validate_dataframe(df, "contract")
     
     # Should handle gracefully
     assert valid_df.count() == 0
@@ -144,7 +144,7 @@ def test_empty_dataframe_handling(spark):
     
     # Empty dataframe with correct schema
     empty_df = spark.createDataFrame([], schema=contract_schema)
-    valid_df, invalid_df = validator.validate_and_cast_contract(empty_df)
+    valid_df, invalid_df = validator.validate_dataframe(empty_df, "contract")
     
     # Should handle empty dataframes gracefully
     assert valid_df.count() == 0

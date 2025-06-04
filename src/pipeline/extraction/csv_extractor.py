@@ -1,4 +1,3 @@
-
 from pyspark.sql import DataFrame, SparkSession
 
 from src.config import get_csv_options

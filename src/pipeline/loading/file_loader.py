@@ -12,11 +12,9 @@ class FileLoader(BaseLoader):
 
     def __init__(self, output_dir: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(output_dir)
-        # Fix: Use the config parameter or get default
         if config is None:
             config = get_file_format_config()
-
-        self.config = config  # Fix: Assign to self.config instead of unused local variable
+        self.config = config
 
         if "output_format" not in self.config:
             raise ValueError("output_format is required in config")
@@ -37,7 +35,6 @@ class FileLoader(BaseLoader):
 
         # Use the internal write method
         self._write_data(data, output_path_str)
-
         self.logger.info(f"Data loaded successfully to {output_path_str}")
 
     def load_invalid_data(self, invalid_data: Dict[str, DataFrame]) -> None:
@@ -49,8 +46,8 @@ class FileLoader(BaseLoader):
                 if df.count() > 0:
                     invalid_path = join_paths(invalid_base_path, data_type)
                     invalid_path_str = str(invalid_path)
-
                     self.logger.info(f"Loading {df.count()} invalid {data_type} records to {invalid_path_str}")
+
                     self._write_data(df, invalid_path_str)
                     self.logger.info(f"Successfully loaded invalid {data_type} to {invalid_path_str}")
                 else:
