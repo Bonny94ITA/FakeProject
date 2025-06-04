@@ -9,6 +9,9 @@ Takes CSV files with contracts and claims data, joins them together, and outputs
 ## Quick start
 
 ```bash
+# Copy environment template
+cp .env.example .env
+
 # Run everything with Docker
 make docker-run
 
@@ -26,6 +29,7 @@ make docker-clean        # Clean up containers and images
 
 ```bash
 # If you want to run without Docker
+cp .env.example .env
 make run                 # Run pipeline locally
 make test                # Run tests locally
 ```
